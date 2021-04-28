@@ -1,0 +1,60 @@
+version: "3.9"
+services:
+    api:
+        image: "clue/json-server:latest"
+        ports:
+            - "3000:80"
+        volumes:
+            - ./data/json-server/lumber_futures.json:/data/db.json
+
+    db:
+        image: postgres:13.2
+        environment:
+            POSTGRES_PASSWORD: test
+        ports:
+            - "5432:5432"
+        volumes:
+            - database:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U postgres"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
+    spark-master:
+        image: bde2020/spark-master:latest
+        container_name: spark-master
+        ports:
+            - "8080:8080"
+            - "7077:7077"
+        environment:
+            - INIT_DAEMON_STEP=setup_spark
+        volumes:
+            - ./data/spark:/tmp/spark
+
+    spark-worker-1:
+        image: bde2020/spark-worker:latest
+        container_name: spark-worker-1
+        depends_on:
+            - spark-master
+        ports:
+            - "8081:8081"
+        environment:
+            - "SPARK_MASTER=spark://spark-master:7077"
+        volumes:
+            - ./data/spark:/tmp/spark
+
+    spark-worker-2:
+        image: bde2020/spark-worker:latest
+        container_name: spark-worker-2
+        depends_on:
+            - spark-master
+        ports:
+            - "8082:8081"
+        environment:
+            - "SPARK_MASTER=spark://spark-master:7077"
+        volumes:
+            - ./data/spark:/tmp/spark
+
+volumes:
+    database:
