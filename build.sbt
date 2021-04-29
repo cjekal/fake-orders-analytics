@@ -5,7 +5,8 @@ version := "0.1"
 scalaVersion := "2.12.13"
 
 libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.1.1" % "provided"
-libraryDependencies += "org.postgresql" % "postgresql" % "42.2.5"
+libraryDependencies += "org.postgresql" % "postgresql" % "42.2.20"
+libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.4.2"
 
 assemblyMergeStrategy in assembly := {
   case PathList("org","aopalliance", xs @ _*) => MergeStrategy.last
