@@ -18,15 +18,38 @@ object SampleApp {
     import spark.implicits._
 
     val ordersDF = spark.read.option("header", "true").csv("/tmp/spark/orders_history.csv")
+    ordersDF.createOrReplaceTempView("orders")
 
     val props = new Properties()
     props.put("user", "postgres")
     props.put("password", "test")
     val customersDF = spark.read.option("driver", "org.postgresql.Driver").jdbc("jdbc:postgresql://db:5432/postgres", "public.customers", props)
+    customersDF.createOrReplaceTempView("customers")
 
     val productCategoriesDF = spark.read.option("driver", "org.postgresql.Driver").jdbc("jdbc:postgresql://db:5432/postgres", "public.product_categories", props)
+    productCategoriesDF.createOrReplaceTempView("product_categories")
 
-    val preDF = ordersDF.join(customersDF, "customer_id").join(productCategoriesDF, "product_category_id")
+    val preDF = spark.sql(
+      """
+        |select
+        | c.name as customer_name,
+        | p.name as product_category_name,
+        | o.order_date,
+        | sum(o.order_qty * o.price_per_unit) as order_price,
+        | sum(o.order_qty * o.cost_per_unit) as order_cost,
+        | sum(o.order_qty) as order_qty,
+        | sum(o.order_qty * o.price_per_unit) / sum(o.order_qty) as price_per_unit,
+        | sum(o.order_qty * o.cost_per_unit) / sum(o.order_qty) as cost_per_unit
+        |from orders as o
+        | join customers as c
+        |   on o.customer_id = c.customer_id
+        | join product_categories p
+        |   on o.product_category_id = p.product_category_id
+        |group by
+        | c.name,
+        | p.name,
+        | o.order_date
+        |""".stripMargin)
 
     val df = preDF.map(record => {
       val mapper = new ObjectMapper()
@@ -43,15 +66,15 @@ object SampleApp {
       }
       val lumberFutures = mapper.readValue(json, classOf[LumberFutures])
       (
+        record.getString(0),
+        record.getString(1),
         record.getString(2),
-        record.getString(3).toLong,
-        record.getString(4).toDouble,
-        record.getString(5).toDouble,
-        record.getString(6),
-        record.getString(7),
-        record.getString(8),
-        record.getString(9),
-        record.getInt(10),
+        (dateFormat.parse(record.getString(2)).getTime / 1000 / 60 / 60 / 24).toDouble,
+        record.getDouble(3),
+        record.getDouble(4),
+        record.getDouble(5),
+        record.getDouble(6),
+        record.getDouble(7),
         lumberFutures.price,
         lumberFutures.open,
         lumberFutures.high,
@@ -59,10 +82,10 @@ object SampleApp {
         parseVolume(lumberFutures.volume),
         parseChangeInPct(lumberFutures.changeInPct)
       )
-    }).toDF("order_date", "order_qty", "cost_per_unit", "price_per_unit", "customer_name", "customer_address", "customer_shipping_address", "product_category_name", "product_category_quality_tier", "lumber_futures_price", "lumber_futures_open", "lumber_futures_high", "lumber_futures_low", "lumber_futures_volume", "lumber_futures_pct_change")
+    }).toDF("customer_name", "product_category_name", "order_date", "order_epoch_time", "order_price", "order_cost", "order_qty", "price_per_unit", "cost_per_unit", "lumber_futures_price", "lumber_futures_open", "lumber_futures_high", "lumber_futures_low", "lumber_futures_volume", "lumber_futures_pct_change")
 
     val model = new IsotonicRegression()
-    model.setFeaturesCol("lumber_futures_price")
+    model.setFeaturesCol("order_epoch_time")
     model.setLabelCol("cost_per_unit")
     model.setPredictionCol("predicted_cost_per_unit")
     model.setIsotonic(true)
