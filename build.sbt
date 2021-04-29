@@ -5,6 +5,7 @@ version := "0.1"
 scalaVersion := "2.12.13"
 
 libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.1.1" % "provided"
+libraryDependencies += "org.apache.spark" %% "spark-mllib" % "3.1.1" % "provided"
 libraryDependencies += "org.postgresql" % "postgresql" % "42.2.20"
 libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.4.2"
 
