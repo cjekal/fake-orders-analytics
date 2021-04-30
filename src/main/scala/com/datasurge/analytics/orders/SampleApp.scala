@@ -9,10 +9,16 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.spark.ml.regression.IsotonicRegression
 import org.apache.spark.sql.SparkSession
 import scalaj.http.Http
+import org.elasticsearch.spark.sql._
 
 object SampleApp {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("Sample Application").getOrCreate()
+    val spark = SparkSession.
+      builder.
+      appName("Sample Application").
+      config("spark.es.nodes", "elasticsearch").
+      config("spark.es.port", "9200").
+      getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
     import spark.implicits._
@@ -96,7 +102,7 @@ object SampleApp {
     println(s"Predictions associated with the boundaries: ${modelOutput.predictions}\n")
 
     val dfWithPredictions = modelOutput.transform(df)
-    dfWithPredictions.show()
+    dfWithPredictions.saveToEs("orders")
 
     spark.stop()
   }

@@ -17,8 +17,8 @@ if __name__ == "__main__":
             "order_qty": faker.random_int(min=100, max=5000),
             "customer_id": faker.random_int(min=1, max=3),
             "product_category_id": faker.random_int(min=1, max=3),
-            "cost_per_unit": jitter_value(faker, order_date, 500, 0.00005),
-            "price_per_unit": jitter_value(faker, order_date, 600, 0.00005)
+            "cost_per_unit": jitter_value(faker, order_date, 500, 0.005),
+            "price_per_unit": jitter_value(faker, order_date, 600, 0.005)
         }
         data.append(order)
     

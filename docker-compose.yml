@@ -54,6 +54,34 @@ services:
             - "SPARK_MASTER=spark://spark-master:7077"
         volumes:
             - ./data/spark:/tmp/spark
+    
+    elasticsearch:
+        image: elasticsearch:7.12.1
+        ports: 
+            - "9200:9200"
+            - "9300:9300"
+        volumes:
+            - elasticsearch:/usr/share/elasticsearch/data
+        environment:
+            - "discovery.type=single-node"
+            - "xpack.security.enabled=false"
+            - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+        ulimits:
+            nproc: 3000
+            nofile: 65536
+            memlock: -1
+        deploy:
+            resources:
+                limits:
+                    memory: 2g
+    
+    kibana:
+        image: kibana:7.12.1
+        ports:
+            - "5601:5601"
+        environment:
+            - "xpack.security.enabled=false"
 
 volumes:
     database:
+    elasticsearch:
