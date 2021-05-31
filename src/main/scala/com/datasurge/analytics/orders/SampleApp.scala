@@ -23,8 +23,25 @@ object SampleApp {
 
     import spark.implicits._
 
-    val ordersDF = spark.read.option("header", "true").csv("/tmp/spark/orders_history.csv")
-    ordersDF.createOrReplaceTempView("orders")
+    val detailsDF = spark.read.
+      option("header", "true").
+      option("sep", "\t").
+      option("inferSchema", "true").
+      csv("/tmp/spark/demo_data/claim_service.csv")
+    val claimsDF = spark.read.
+      option("header", "true").
+      option("sep", "\t").
+      option("inferSchema", "true").
+      csv("/tmp/spark/demo_data/claim.csv")
+    val beneficiariesDF = spark.read.
+      option("header", "true").
+      option("sep", "\t").
+      option("inferSchema", "true").
+      csv("/tmp/spark/demo_data/beneficiary.csv")
+
+    detailsDF.createOrReplaceTempView("details")
+    claimsDF.createOrReplaceTempView("claims")
+    beneficiariesDF.createOrReplaceTempView("beneficiaries")
 
     val props = new Properties()
     props.put("user", "postgres")
@@ -35,27 +52,42 @@ object SampleApp {
     val productCategoriesDF = spark.read.option("driver", "org.postgresql.Driver").jdbc("jdbc:postgresql://db:5432/postgres", "public.product_categories", props)
     productCategoriesDF.createOrReplaceTempView("product_categories")
 
-    val preDF = spark.sql(
+    val denormDF = spark.sql(
       """
         |select
-        | c.name as customer_name,
-        | p.name as product_category_name,
-        | o.order_date,
-        | sum(o.order_qty * o.price_per_unit) as order_price,
-        | sum(o.order_qty * o.cost_per_unit) as order_cost,
-        | sum(o.order_qty) as order_qty,
-        | sum(o.order_qty * o.price_per_unit) / sum(o.order_qty) as price_per_unit,
-        | sum(o.order_qty * o.cost_per_unit) / sum(o.order_qty) as cost_per_unit
-        |from orders as o
-        | join customers as c
-        |   on o.customer_id = c.customer_id
-        | join product_categories p
-        |   on o.product_category_id = p.product_category_id
-        |group by
-        | c.name,
-        | p.name,
-        | o.order_date
+        | d.*,
+        | c.disposition,
+        | c.carrier_number,
+        | c.payment_denial_code,
+        | c.claim_payment_amount,
+        | c.referring_physician_npi,
+        | c.referring_physician_upin,
+        | c.provider_payment_amount as claim_provider_payment_amount,
+        | c.beneficiary_payment_amount,
+        | c.claim_submitted_amount,
+        | c.claim_allowed_amount,
+        | c.claim_cash_deductible_applied_amount,
+        | c.principal_diagnosis_code,
+        | c.principal_diagnosis,
+        | c.age_range,
+        | c.county as claim_county,
+        | c.state as claim_state,
+        | b.reference_year,
+        | b.state as beneficiary_state,
+        | b.county as beneficiary_county,
+        | b.gender,
+        | b.race,
+        | b.age,
+        | b.reason_for_entitlement,
+        | b.date_of_death,
+        | b.medicare_medicaid_status
+        |from details d
+        | join claims c
+        |   on d.claim_number = c.claim_number
+        | join beneficiaries b
+        |   on d.beneficiary_id = b.beneficiary_id
         |""".stripMargin)
+    denormDF.createOrReplaceTempView("denorm")
 
     val df = preDF.map(record => {
       val mapper = new ObjectMapper()
