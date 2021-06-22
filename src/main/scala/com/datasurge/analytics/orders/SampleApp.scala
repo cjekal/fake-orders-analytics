@@ -1,14 +1,8 @@
 package com.datasurge.analytics.orders
 
-import java.text.SimpleDateFormat
-import java.util.{Calendar, Properties}
+import java.util.Properties
 
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.spark.ml.regression.IsotonicRegression
 import org.apache.spark.sql.SparkSession
-import scalaj.http.Http
 import org.elasticsearch.spark.sql._
 
 object SampleApp {
@@ -20,8 +14,6 @@ object SampleApp {
       config("spark.es.port", "9200").
       getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
-
-    import spark.implicits._
 
     val detailsDF = spark.read.
       option("header", "true").
@@ -46,16 +38,45 @@ object SampleApp {
     val props = new Properties()
     props.put("user", "postgres")
     props.put("password", "test")
-    val customersDF = spark.read.option("driver", "org.postgresql.Driver").jdbc("jdbc:postgresql://db:5432/postgres", "public.customers", props)
-    customersDF.createOrReplaceTempView("customers")
-
-    val productCategoriesDF = spark.read.option("driver", "org.postgresql.Driver").jdbc("jdbc:postgresql://db:5432/postgres", "public.product_categories", props)
-    productCategoriesDF.createOrReplaceTempView("product_categories")
+    val hcpcsDF = spark.read.option("driver", "org.postgresql.Driver").jdbc("jdbc:postgresql://db:5432/postgres", "public.hcpcs_codes", props)
+    hcpcsDF.createOrReplaceTempView("hcpcs_codes")
 
     val denormDF = spark.sql(
       """
         |select
-        | d.*,
+        | d.beneficiary_id,
+        | d.claim_number,
+        | d.line_number,
+        | date_format(cast(d.claim_date as timestamp), "yyyy-MM-dd") as claim_date,
+        | d.claim_type,
+        | d.performing_pin_number,
+        | d.performing_physician_npi,
+        | d.provider_type,
+        | d.provider_state,
+        | d.provider_specialty,
+        | d.cms_type_service,
+        | d.place_of_service,
+        | date_format(cast(d.last_expense_date as timestamp), "yyyy-MM-dd") as last_expense_date,
+        | d.hcpcs_code,
+        | h.SHORT_DESCRIPTION as hcpcs_code_description,
+        | d.payment_amount,
+        | d.bene_payment_amount,
+        | d.provider_payment_amount,
+        | d.bene_part_b_deductible_amount,
+        | d.bene_primary_payer_paid_amount,
+        | d.coinsurance_amount,
+        | d.submitted_charged_amount,
+        | d.allowed_charged_amount,
+        | d.diagnosis_code,
+        | d.diagnosis,
+        | d.clinical_lab_charge_amount,
+        | d.other_applied_amount1,
+        | d.other_applied_amount2,
+        | d.other_applied_amount3,
+        | d.other_applied_amount4,
+        | d.other_applied_amount5,
+        | d.other_applied_amount6,
+        | d.other_applied_amount7,
         | c.disposition,
         | c.carrier_number,
         | c.payment_denial_code,
@@ -79,87 +100,21 @@ object SampleApp {
         | b.race,
         | b.age,
         | b.reason_for_entitlement,
-        | b.date_of_death,
+        | date_format(cast(b.date_of_death as timestamp), "yyyy-MM-dd") as date_of_death,
         | b.medicare_medicaid_status
         |from details d
         | join claims c
         |   on d.claim_number = c.claim_number
         | join beneficiaries b
         |   on d.beneficiary_id = b.beneficiary_id
+        | left join hcpcs_codes h
+        |   on d.hcpcs_code = h.HCPC
         |""".stripMargin)
     denormDF.createOrReplaceTempView("denorm")
 
-    val df = preDF.map(record => {
-      val mapper = new ObjectMapper()
-      mapper.registerModule(DefaultScalaModule)
-      var lumberDate = record.getString(2)
-      var json = Http(s"http://api/lumber/${lumberDate}").asString.body
-      val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
-      while (json == "" || json == "{}") {
-        val calendar = Calendar.getInstance()
-        calendar.setTime(dateFormat.parse(lumberDate))
-        calendar.add(Calendar.DATE, -1)
-        lumberDate = dateFormat.format(calendar.getTime)
-        json = Http(s"http://api/lumber/${lumberDate}").asString.body
-      }
-      val lumberFutures = mapper.readValue(json, classOf[LumberFutures])
-      (
-        record.getString(0),
-        record.getString(1),
-        record.getString(2),
-        (dateFormat.parse(record.getString(2)).getTime / 1000 / 60 / 60 / 24).toDouble,
-        record.getDouble(3),
-        record.getDouble(4),
-        record.getDouble(5),
-        record.getDouble(6),
-        record.getDouble(7),
-        lumberFutures.price,
-        lumberFutures.open,
-        lumberFutures.high,
-        lumberFutures.low,
-        parseVolume(lumberFutures.volume),
-        parseChangeInPct(lumberFutures.changeInPct)
-      )
-    }).toDF("customer_name", "product_category_name", "order_date", "order_epoch_time", "order_price", "order_cost", "order_qty", "price_per_unit", "cost_per_unit", "lumber_futures_price", "lumber_futures_open", "lumber_futures_high", "lumber_futures_low", "lumber_futures_volume", "lumber_futures_pct_change")
-
-    val model = new IsotonicRegression()
-    model.setFeaturesCol("order_epoch_time")
-    model.setLabelCol("cost_per_unit")
-    model.setPredictionCol("predicted_cost_per_unit")
-    model.setIsotonic(true)
-
-    val modelOutput = model.fit(df)
-
-    println(s"Boundaries in increasing order: ${modelOutput.boundaries}\n")
-    println(s"Predictions associated with the boundaries: ${modelOutput.predictions}\n")
-
-    val dfWithPredictions = modelOutput.transform(df)
-    dfWithPredictions.saveToEs("orders")
+    denormDF.write.parquet("/tmp/spark/output")
+    denormDF.saveToEs("claims")
 
     spark.stop()
   }
-
-  def parseVolume(volume: String) = {
-    if (volume.endsWith("K")) {
-      (volume.replace("K", "").toDouble * 1000).toLong
-    }
-    else if (volume.endsWith("M")) {
-      (volume.replace("M", "").toDouble * 1000 * 1000).toLong
-    }
-    else {
-      0L
-    }
-  }
-
-  def parseChangeInPct(changeInPct: String) = changeInPct.replace("%", "").toDouble / 100
 }
-
-case class LumberFutures(
-  id: String,
-  price: Double,
-  open: Double,
-  high: Double,
-  low: Double,
-  volume: String,
-  @JsonProperty("change_in_pct") changeInPct: String
-)
