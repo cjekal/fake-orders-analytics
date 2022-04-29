@@ -9,6 +9,7 @@ libraryDependencies += "org.apache.spark" %% "spark-mllib" % "3.1.1" % "provided
 libraryDependencies += "org.postgresql" % "postgresql" % "42.2.20"
 libraryDependencies += "org.scalaj" %% "scalaj-http" % "2.4.2"
 libraryDependencies += "org.elasticsearch" %% "elasticsearch-spark-30" % "7.12.1"
+libraryDependencies += "commons-httpclient" % "commons-httpclient" % "3.1"
 
 assemblyMergeStrategy in assembly := {
   case PathList("org","aopalliance", xs @ _*) => MergeStrategy.last

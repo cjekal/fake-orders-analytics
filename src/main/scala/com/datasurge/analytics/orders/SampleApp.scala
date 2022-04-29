@@ -18,6 +18,7 @@ object SampleApp {
       appName("Sample Application").
       config("spark.es.nodes", "elasticsearch").
       config("spark.es.port", "9200").
+      config("es.index.auto.create", "true").
       getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
@@ -102,7 +103,15 @@ object SampleApp {
     println(s"Predictions associated with the boundaries: ${modelOutput.predictions}\n")
 
     val dfWithPredictions = modelOutput.transform(df)
+    dfWithPredictions.show(false)
     dfWithPredictions.saveToEs("orders")
+
+    println("done saving to ES!")
+
+    val esDF = spark.esDF("orders")
+    esDF.show(false)
+
+    println("done reading from ES!")
 
     spark.stop()
   }
