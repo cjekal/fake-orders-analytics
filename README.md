@@ -28,3 +28,85 @@ gcloud run deploy tabpy-serve --project "sbir-training" --image gcr.io/sbir-trai
 SCRIPT_REAL("
 return tab_py.query('tf_idf_cosine_similarity', _arg1, _arg2)['response']
 ", ATTR([First Forename]), [Search First Forename]) < 0.5
+
+
+```es
+PUT /kindas
+{
+  "mappings": {
+    "properties" : {
+        "fArr" : {
+          "type": "nested",
+          "properties" : {
+            "fArrDec" : {
+              "type" : "float"
+            },
+            "fArrStr" : {
+              "type" : "text",
+              "fields" : {
+                "keyword" : {
+                  "type" : "keyword",
+                  "ignore_above" : 256
+                }
+              }
+            }
+          }
+        },
+        "fComplex" : {
+          "properties" : {
+            "fComplexInt" : {
+              "type" : "long"
+            },
+            "fComplexStr" : {
+              "type" : "text",
+              "fields" : {
+                "keyword" : {
+                  "type" : "keyword",
+                  "ignore_above" : 256
+                }
+              }
+            }
+          }
+        },
+        "fDec" : {
+          "type" : "float"
+        },
+        "fInt" : {
+          "type" : "long"
+        },
+        "fStr" : {
+          "type" : "text",
+          "fields" : {
+            "keyword" : {
+              "type" : "keyword",
+              "ignore_above" : 256
+            }
+          }
+        }
+      }
+  }
+}
+```
+
+```es
+POST /kindas/_doc
+{
+  "fStr": "str",
+  "fInt": 1,
+  "fDec": 1.0,
+  "fArr": [
+    {
+      "fArrStr": "arr-str-1",
+      "fArrDec": 1.0
+    },
+    {
+      "fArrStr": "arr-str-2",
+      "fArrDec": 2.0
+    }
+  ],
+  "fComplex": {
+    "fComplexStr": "f-complex-str",
+    "fComplexInt": 1
+  }
+}
+```
